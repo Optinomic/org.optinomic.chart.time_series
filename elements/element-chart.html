@@ -1,0 +1,314 @@
+<link rel="import" href="optinomic-elements-helpers/optinomic-indication.html">
+<link rel="import" href="iron-flex-layout/iron-flex-layout.html">
+<link rel="import" href="iron-flex-layout/iron-flex-layout-classes.html">
+<link rel="import" href="iron-collapse/iron-collapse.html">
+<link rel="import" href="plotly-plot/plotly-plot.html">
+<link rel="import" href="vaadin-combo-box/vaadin-combo-box.html">
+<dom-module id="element-chart">
+    <template>
+        <style include="shared-styles">
+         :host {
+            display: block;
+        }
+
+        .chart {
+            border-top-color: #EEEEEE;
+            border-top-style: solid;
+            border-top-width: 1px;
+        }
+
+        .title {
+            z-index: 10;
+            position: relative;
+            left: 6px;
+            top: 0;
+        }
+
+        .plot {
+            margin-top: -48px;
+            border-bottom-color: #EEEEEE;
+            border-bottom-style: solid;
+            border-bottom-width: 1px;
+        }
+        </style>
+        <div id="element">
+            <template is="dom-if" if="[[init_done]]" restamp="true">
+                <template is="dom-if" if="[[plotdata_ready]]" restamp="true">
+                    <div class="chart">
+                        <h2 class="title">[[name]]</h2>
+                        <div class="plot">
+                            <plotly-plot data$='[[plotdata]]' layout$='[[plotlayout]]'></plotly-plot>
+                        </div>
+                        <p class="caption" style="text-align:right;padding-right:6px;">Abbildung: [[name]]</p>
+                    </div>
+                </template>
+                <div>
+                    <h2>Datenquelle</h2>
+                    <vaadin-combo-box id="datasource" on-change="_setDataSource" label="Datenquelle" items="[[_data_definitions]]" item-value-path="id" item-label-path="options.name">
+                        <template>
+                            <paper-icon-item>
+                                <paper-item-body two-line>
+                                    <div><b>[[item.options.name]]:</b> [[item.fields.length]]</div>
+                                </paper-item-body>
+                            </paper-icon-item>
+                        </template>
+                    </vaadin-combo-box>
+                    <template is="dom-if" if="[[_selected_datasource]]" restamp="true">
+                        <element-export file-definitions="[[_selected_data_definition]]" filter="[[export_filter]]" override-settings="[[_override_settings]]" on-json="_set_data"></element-export>
+                    </template>
+                    <template is="dom-if" if="[[data_ready]]" restamp="true">
+                        <vaadin-combo-box id="datafield" on-change="_setFocusField" label="Feld" items="[[data.header]]">
+                            <template>
+                                <paper-icon-item>
+                                    <paper-item-body>
+                                        [[item]]
+                                    </paper-item-body>
+                                </paper-icon-item>
+                            </template>
+                        </vaadin-combo-box>
+                    </template>
+                </div>
+            </template>
+            <template is="dom-if" if="[[!init_done]]" restamp="true">
+                <optinomic-indication sign=":" title="Initialisiere..." color="#3F51B5"></optinomic-indication>
+            </template>
+        </div>
+    </template>
+    <script>
+    Polymer({
+        is: 'element-chart',
+
+        behaviors: [ReduxBehavior, AsyncActionsBehavior, optinomicExportToolbox, optinomicCharts],
+
+        properties: {
+            name: {
+                type: String
+            }
+        },
+
+
+        // -----------------------------
+        // User-Click Functions
+        // -----------------------------
+
+        _setDataSource: function() {
+            this.set('_selected_datasource', false);
+            var datasource = this.$$('#datasource');
+
+            var selected_id = parseInt(datasource.value);
+            var _data_definitions = this.get('_data_definitions');
+            var _override_settings = this.get('_override_settings');
+
+            _data_definitions.forEach(function(d, dID) {
+                if (d.id === selected_id) {
+                    var _selected_data_definition = Object.assign({}, d);
+                    this.set('_selected_data_definition', _selected_data_definition);
+                    this.set('_selected_datasource', true);
+                    console.log('_setDataSource', this._selected_data_definition);
+                };
+            }.bind(this));
+        },
+
+
+        _setFocusField: function() {
+            var datafield = this.$$('#datafield');
+            console.warn('(_setFocusField)', datafield.value);
+
+            var rows = this.get('data.rows');
+
+            rows.sort(function(a, b) {
+                var a = a.optinomic_filled.toLowerCase(),
+                    b = b.optinomic_filled.toLowerCase()
+                if (a < b) //sort string ascending
+                    return -1
+                if (a > b)
+                    return 1
+                return 0 //default return value (no sorting)
+            })
+
+
+            this._createPlotdata(rows, datafield.value);
+        },
+
+
+
+        // -----------------------------
+        // Functions
+        // -----------------------------
+        _dataChanged: function() {
+            this.set('data_ready', true);
+
+
+            console.warn('(_dataChanged) data', this.data);
+
+        },
+
+
+        _createPlotdata: function(rows, focus_field) {
+
+
+            function unpack(rows, key) {
+                return rows.map(function(row) { return row[key]; });
+            };
+
+
+            var trace1 = {
+                type: "scatter",
+                mode: "lines",
+                name: "Erfassung",
+                x: unpack(rows, 'optinomic_filled'),
+                y: unpack(rows, focus_field),
+                line: { color: '#3F51B5' },
+                marker: { size: 12 },
+                hoverinfo: "x+y+name"
+            };
+
+            var transforms = [{
+                    "styles": [{
+                            "target": "male",
+                            "value": {
+                                "visible": true,
+                                "line": {
+                                    "color": "rgba(63, 81, 181, 0.8)",
+                                    "width": 3
+                                },
+                                "name": "Männer",
+                                "hoverinfo": "x+y+name"
+                            }
+                        },
+                        {
+                            "target": "female",
+                            "value": {
+                                "visible": true,
+                                "line": {
+                                    "color": "rgb(233, 30, 99, 0.8)",
+                                    "width": 3
+                                },
+                                "name": "Frauen",
+                                "hoverinfo": "x+y+name"
+                            }
+                        }
+                    ],
+                    "style": [],
+                    "enabled": true,
+                    "groups": unpack(rows, 'optinomic_patient_gender'),
+                    "groupbyId": "1e93e4",
+                    "groupssrc": "optinomic:6:7c847d",
+                    "type": "groupby"
+                }]
+
+
+            var trace_gender = {
+                type: "scatter",
+                mode: "markers",
+                name: "Gender",
+                x: unpack(rows, 'optinomic_filled'),
+                y: unpack(rows, 'optinomic_patient_gender'),
+                line: { color: '#17BECF' },
+                marker: { size: 12 }
+            };
+
+
+
+
+            var plotdata = [];
+            plotdata.push(trace1);
+            // plotdata.push(trace_gender);
+            this.set('plotdata', plotdata);
+
+
+
+
+            var layout = {
+                "autosize": true,
+                "yaxis": {
+                    "range": [-10.957755390597384,
+                        3.7377553905973846
+                    ],
+                    "type": "linear",
+                    "autorange": true,
+                    "title": focus_field
+                },
+                "title": this.name,
+                "showlegend": true,
+                "titlefont": {
+                    "family": "Roboto",
+                    "size": 32
+                },
+                "xaxis": {
+                    "title": "Erfassung",
+                    "range": [
+                        "2015-01-12 03:46:53.9538",
+                        "2017-05-25 14:51:39.3939"
+                    ],
+                    "showline": false,
+                    "rangeselector": {
+                        "buttons": [{
+                                "step": "all",
+                                "label": "reset"
+                            },
+                            {
+                                "label": "#1"
+                            }
+                        ]
+                    },
+                    "type": "date",
+                    "autorange": false,
+                    "rangeslider": {
+                        "bordercolor": "#444",
+                        "thickness": 0.15,
+                        "bgcolor": "white",
+                        "range": [
+                            "2015-01-12 03:46:53.9538",
+                            "2017-06-01 07:54:03.3675"
+                        ],
+                        "borderwidth": 0,
+                        "autorange": true
+                    }
+                },
+                "hovermode": "closest",
+                "font": {
+                    "family": "Roboto"
+                },
+                "legend": {
+                    "y": 1.1534810126582278,
+                    "x": 0.9339656783568188
+                }
+            };
+
+            this.set('plotlayout', layout);
+            this.set('plotdata_ready', true);
+
+            console.warn('_createPlotdata :: ', rows, focus_field, plotdata, layout);
+
+        },
+
+
+
+
+        // -----------------------------
+        // Observer
+        // -----------------------------
+
+
+        _set_data: function(e) {
+            this.set('data', e.detail);
+            //console.warn('(event) data', this.data);
+            this._dataChanged();
+        },
+
+        // -----------------------------
+        // Lifecycle
+        // -----------------------------
+
+        ready: function() {
+            this.set('init_done', true);
+            this.set('data_ready', false);
+            this.set('plotdata_ready', false);
+
+            this.set('_selected_datasource', false);
+
+        }
+    });
+    </script>
+</dom-module>
