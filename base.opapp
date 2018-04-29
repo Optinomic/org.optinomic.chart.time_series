@@ -21,7 +21,7 @@ website = http://www.optinomic.com/
 __opapp_include(readme.md)
 
 [template main 6 7]
-__opapp_include(../lib/polymer/index.m4)
+__opapp_include(lib/polymer/index.m4)
 __opapp_include(../org.optinomic.export.toolbox/elements/element-export.html)
 __opapp_include(../org.optinomic.export.toolbox/elements/behavior-export-toolbox.html)
 __opapp_include(elements/behavior-charts.html)
